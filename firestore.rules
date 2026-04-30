@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    
+    // User Validation
+    function isValidUser(data) {
+      return data.keys().hasAll(['scansPerformed', 'threatsDetected', 'threatsBlocked', 'securityScore'])
+        && data.keys().size() == 4
+        && data.scansPerformed is number
+        && data.threatsDetected is number
+        && data.threatsBlocked is number
+        && data.securityScore is number;
+    }
+
+    // Threat Validation
+    function isValidThreat(data) {
+      return data.keys().hasAll(['userId', 'type', 'source', 'content', 'createdAt', 'timestamp', 'level', 'status', 'analysis'])
+        && data.keys().size() == 9
+        && data.userId == request.auth.uid
+        && data.type in ['SMS', 'Call', 'App', 'URL']
+        && data.source is string && data.source.size() <= 256
+        && data.content is string && data.content.size() <= 10000
+        && data.createdAt == request.time
+        && data.timestamp is string && data.timestamp.size() <= 64
+        && data.level in ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
+        && data.status in ['pending', 'blocked', 'dismissed']
+        && data.analysis is string && data.analysis.size() <= 5000;
+    }
+
+    // Signature Validation
+    function isValidSignature(data) {
+      return data.keys().hasAll(['pattern', 'type', 'level', 'createdAt', 'creatorId'])
+        && data.keys().size() == 5
+        && data.pattern is string && data.pattern.size() <= 1000
+        && data.type is string && data.type.size() <= 64
+        && data.level is string && data.level.size() <= 32
+        && data.creatorId == request.auth.uid
+        && data.createdAt == request.time;
+    }
+
+    // --- Collections ---
+
+    // User Profile & Stats
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['scansPerformed', 'threatsDetected', 'threatsBlocked', 'securityScore'])
+      );
+    }
+
+    // Threat Records
+    match /threats/{threatId} {
+      allow get: if isSignedIn() && existing().userId == request.auth.uid && isValidId(threatId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidThreat(incoming()) && isValidId(threatId);
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+
+    // Global Signatures
+    match /global-signatures/{signatureId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidSignature(incoming()) && isValidId(signatureId);
+      // Immutable
+    }
+  }
+}

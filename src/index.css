@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-cyber-bg: #05070A;
+  --color-cyber-ink: #0A0E14;
+  --color-cyber-line: #1e293b; /* slate-800 */
+  --color-cyber-green: #10b981; /* emerald-500 */
+  --color-cyber-amber: #f59e0b; /* amber-500 */
+  --color-cyber-red: #f43f5e; /* rose-500 */
+  --color-cyber-blue: #06b6d4; /* cyan-500 */
+}
+
+@layer base {
+  body {
+    @apply bg-cyber-bg text-slate-200 font-sans antialiased;
+  }
+}
+
+.cyber-grid {
+  background-image: 
+    linear-gradient(to right, #1e293b 1px, transparent 1px),
+    linear-gradient(to bottom, #1e293b 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.cyber-panel {
+  @apply bg-slate-900/50 border border-slate-800 relative overflow-hidden backdrop-blur-sm;
+}
+
+.cyber-panel-bright {
+  @apply bg-gradient-to-br from-slate-900 to-black border border-slate-800 relative overflow-hidden;
+}
+
+.glitch-text {
+  text-shadow: 2px 0 #f43f5e, -2px 0 #06b6d4;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-cyber-bg;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-cyber-line hover:bg-gray-700;
+}

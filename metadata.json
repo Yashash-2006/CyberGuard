@@ -1,0 +1,6 @@
+{
+  "name": "CyberGuard",
+  "description": "AI-powered personal mobile defence system that analyzes SMS, calls, and app behavior to detect and alert users to potential phishing and social engineering threats in real-time.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

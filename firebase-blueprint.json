@@ -1,0 +1,60 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User specific statistics and security profile",
+      "type": "object",
+      "properties": {
+        "scansPerformed": { "type": "number" },
+        "threatsDetected": { "type": "number" },
+        "threatsBlocked": { "type": "number" },
+        "securityScore": { "type": "number" }
+      },
+      "required": ["scansPerformed", "threatsDetected", "threatsBlocked", "securityScore"]
+    },
+    "Threat": {
+      "title": "Threat Record",
+      "description": "A record of an analyzed threat or scan",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["SMS", "Call", "App", "URL"] },
+        "source": { "type": "string" },
+        "content": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "level": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "status": { "type": "string", "enum": ["pending", "blocked", "dismissed"] },
+        "analysis": { "type": "string" }
+      },
+      "required": ["userId", "type", "source", "content", "timestamp", "createdAt", "level", "status", "analysis"]
+    },
+    "Signature": {
+      "title": "Anonymized Threat Signature",
+      "description": "Shared threat signature for collective protection",
+      "type": "object",
+      "properties": {
+        "pattern": { "type": "string" },
+        "type": { "type": "string" },
+        "level": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "creatorId": { "type": "string" }
+      },
+      "required": ["pattern", "type", "level", "createdAt", "creatorId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User settings and stats"
+    },
+    "/threats/{threatId}": {
+      "schema": "Threat",
+      "description": "Individual threat detection logs"
+    },
+    "/global-signatures/{signatureId}": {
+      "schema": "Signature",
+      "description": "Anonymized signatures shared across the network"
+    }
+  }
+}
