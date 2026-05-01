@@ -45,3 +45,79 @@ export const MOCK_THREAT_SIGNATURES = [
   { pattern: 'Win a $1000 gift card', type: 'SMS', level: ThreatLevel.MEDIUM },
   { pattern: 'urgent: suspicious activity detected', type: 'SMS', level: ThreatLevel.HIGH },
 ];
+
+export const MOCK_APP_BEHAVIORS = [
+  {
+    appName: 'Flashlight Ultra',
+    action: 'Gained Contact Access',
+    category: 'permission',
+    severity: ThreatLevel.HIGH,
+    details: 'Utility app requested sensitive contact list data.',
+    isSuspicious: true
+  },
+  {
+    appName: 'QuickScan PDF',
+    action: 'Network Uplink to Unknown IP',
+    category: 'network',
+    severity: ThreatLevel.MEDIUM,
+    details: 'Background data transfer to 185.122.x.x detected.',
+    isSuspicious: true
+  },
+  {
+    appName: 'WhatsApp',
+    action: 'Sent Message',
+    category: 'data',
+    severity: ThreatLevel.LOW,
+    details: 'Standard outgoing encrypted communication.',
+    isSuspicious: false
+  },
+  {
+    appName: 'Photo Editor Pro',
+    action: 'Accessed GPS in Background',
+    category: 'permission',
+    severity: ThreatLevel.HIGH,
+    details: 'Continuous location tracking without active UI.',
+    isSuspicious: true
+  },
+  {
+    appName: 'System Update',
+    action: 'Modified File Permissions',
+    category: 'data',
+    severity: ThreatLevel.CRITICAL,
+    details: 'Unsigned binary attempted to escalate privileges.',
+    isSuspicious: true
+  }
+];
+
+export const ONBOARDING_STEPS = [
+  {
+    target: 'dashboard',
+    title: 'Security Control Center',
+    content: 'Welcome to CyberGuard. This is your central hub for monitoring system health and active threat vectors.',
+    icon: 'LayoutDashboard'
+  },
+  {
+    target: 'scan',
+    title: 'Sentinel AI Scanner',
+    content: 'Manually scan messages, URLs, or files. Our Gemini-powered AI identifies social engineering patterns in real-time.',
+    icon: 'Search'
+  },
+  {
+    target: 'scenarios',
+    title: 'Hero Missions',
+    content: 'Simulate sophisticated cyber-attacks to see how Sentinel intercepts them. Learn by experiencing the frontlines.',
+    icon: 'Zap'
+  },
+  {
+    target: 'behavior',
+    title: 'Behavior Analysis Lab',
+    content: 'Monitor application permissions and network activity. Detect malware by its digital behavior, not just its name.',
+    icon: 'Activity'
+  },
+  {
+    target: 'quiz',
+    title: 'Awareness Hub',
+    content: 'Enhance your security intuition. Complete trials to build resistance against modern psychological manipulation.',
+    icon: 'BookOpen'
+  }
+];

@@ -22,17 +22,19 @@ export async function analyzePotentialThreat(content: string, context: string = 
   }
 
   const prompt = `
-    Analyze the following ${context} for cybersecurity threats, specifically phishing, scams, and social engineering patterns.
+    System: You are Sentinel AI, a high-performance cybersecurity analysis engine. 
+    Analyze the provided ${context} for phishing, scams, and social engineering.
+    Provide precise classification based on modern threat vectors.
     
     Content: "${content}"
     
-    Return the analysis in valid JSON format with the following structure:
+    Response Format (JSON):
     {
       "isThreat": boolean,
       "level": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
-      "explanation": "Brief explanation of why it is or isn't a threat",
+      "explanation": "concise technical breakdown",
       "category": "Phishing" | "Scam" | "Social Engineering" | "Safe",
-      "defenceTips": ["Tip 1", "Tip 2"]
+      "defenceTips": ["instantly actionable tip"]
     }
   `;
 

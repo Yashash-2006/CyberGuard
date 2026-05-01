@@ -29,9 +29,10 @@ import {
   Globe
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Threat, ThreatLevel, UserStats } from './types';
+import { Threat, ThreatLevel, UserStats, BehaviorEvent, AppProfile } from './types';
 import { analyzePotentialThreat, AnalysisResult } from './services/gemini';
-import { INITIAL_QUIZZES } from './constants';
+import { INITIAL_QUIZZES, MOCK_APP_BEHAVIORS, ONBOARDING_STEPS } from './constants';
+import { SMS_DATASET, DatasetEntry } from './data/dataset';
 import { auth, db, handleFirestoreError, OperationType } from './lib/firebase';
 import { 
   signInWithPopup, 
@@ -185,6 +186,12 @@ const ThreatScanner = ({ onScanResult }: { onScanResult: (threat: Omit<Threat, '
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [history, setHistory] = useState<string[]>([]);
 
+  const loadRandomSample = () => {
+    const randomIdx = Math.floor(Math.random() * SMS_DATASET.length);
+    setInputText(SMS_DATASET[randomIdx].text);
+    setHistory(prev => [`> LOADED SAMPLE #${randomIdx} FROM DATASET`, ...prev]);
+  };
+
   const runScan = async () => {
     if (!inputText.trim()) return;
     setIsScanning(true);
@@ -241,7 +248,15 @@ const ThreatScanner = ({ onScanResult }: { onScanResult: (threat: Omit<Threat, '
         </div>
 
         <div className="mt-6 flex justify-between items-center">
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest italic">AI Core v4.0.21 Ready</p>
+            <div className="flex gap-4 items-center">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest italic">AI Core v4.0.21 Ready</p>
+                <button 
+                  onClick={loadRandomSample}
+                  className="text-[10px] font-black text-cyan-500 hover:text-cyan-400 uppercase tracking-widest flex items-center gap-2 border border-cyan-500/20 px-3 py-1 rounded-full transition-all"
+                >
+                  <Database className="w-3 h-3" /> Load Dataset Sample
+                </button>
+            </div>
             <button 
                 onClick={runScan}
                 disabled={isScanning || !inputText.trim()}
@@ -462,6 +477,305 @@ const GlobalMap = () => {
     );
 };
 
+const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
+    const [currentStep, setCurrentStep] = useState(0);
+    const step = ONBOARDING_STEPS[currentStep];
+  
+    const next = () => {
+      if (currentStep < ONBOARDING_STEPS.length - 1) {
+        setCurrentStep(prev => prev + 1);
+      } else {
+        onComplete();
+      }
+    };
+  
+    const getIcon = (iconName: string) => {
+      switch(iconName) {
+        case 'LayoutDashboard': return LayoutDashboard;
+        case 'Search': return Search;
+        case 'Zap': return Zap;
+        case 'Activity': return Activity;
+        case 'BookOpen': return BookOpen;
+        default: return Shield;
+      }
+    };
+  
+    const Icon = getIcon(step.icon);
+  
+    return (
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[100] flex items-center justify-center p-8 bg-slate-950/90 backdrop-blur-xl"
+      >
+        <motion.div 
+          key={currentStep}
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 1.1, y: -20 }}
+          className="max-w-xl w-full bg-slate-900 border border-slate-800 rounded-[3rem] p-12 relative shadow-[0_0_100px_rgba(6,182,212,0.1)] overflow-hidden"
+        >
+          {/* Step Indicator */}
+          <div className="absolute top-0 inset-x-0 flex justify-center pt-8 gap-2">
+            {ONBOARDING_STEPS.map((_, i) => (
+              <div key={i} className={`h-1 rounded-full transition-all duration-500 ${i === currentStep ? 'w-8 bg-cyan-500' : 'w-2 bg-slate-800'}`} />
+            ))}
+          </div>
+  
+          <div className="flex flex-col items-center text-center space-y-8">
+            <div className="w-24 h-24 bg-cyan-500/10 rounded-3xl flex items-center justify-center border border-cyan-500/20 shadow-inner">
+              <Icon className="w-10 h-10 text-cyan-400" />
+            </div>
+            
+            <div className="space-y-4">
+              <h2 className="text-3xl font-black text-white tracking-widest uppercase italic">{step.title}</h2>
+              <p className="text-slate-400 text-lg leading-relaxed font-medium">{step.content}</p>
+            </div>
+  
+            <button 
+              onClick={next}
+              className="w-full py-5 bg-cyan-500 text-black font-black text-xs uppercase tracking-[0.3em] hover:bg-cyan-400 transition-all rounded-2xl shadow-[0_0_40px_rgba(6,182,212,0.3)] shadow-cyan-500/20"
+            >
+              {currentStep === ONBOARDING_STEPS.length - 1 ? 'Initialize System' : 'Synchronize Next Module'}
+            </button>
+          </div>
+  
+          {/* Decorative corner */}
+          <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-cyan-500/5 rounded-full blur-[60px]" />
+        </motion.div>
+      </motion.div>
+    );
+  };
+
+const ResearcherPortal = () => {
+    const [validating, setValidating] = useState<string | null>(null);
+    const [results, setResults] = useState<Record<string, { actual: string, predicted: string, isCorrect: boolean }>>({});
+
+    const validateMessage = async (entry: DatasetEntry, index: number) => {
+        setValidating(index.toString());
+        try {
+            const result = await analyzePotentialThreat(entry.text);
+            const predicted = result.isThreat ? 'spam' : 'ham';
+            setResults(prev => ({
+                ...prev,
+                [index]: {
+                    actual: entry.label,
+                    predicted,
+                    isCorrect: entry.label === predicted
+                }
+            }));
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setValidating(null);
+        }
+    };
+
+    return (
+        <div className="space-y-8 h-full flex flex-col">
+            <div className="bg-slate-900/50 border border-slate-800 rounded-[2.5rem] p-10 space-y-4">
+                <div className="flex items-center gap-4 mb-2">
+                    <Activity className="w-8 h-8 text-cyan-400" />
+                    <h2 className="text-2xl font-black text-white tracking-widest uppercase italic">Researcher Portal: Dataset Lab</h2>
+                </div>
+                <p className="text-sm text-slate-500 font-medium leading-relaxed max-w-2xl">
+                    Stress-test the Sentinel AI model against standard datasets. Validate classification accuracy against labeled "Ham" and "Spam" data from the SMS Spam Collection.
+                </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-1 overflow-hidden">
+                <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 flex flex-col overflow-hidden">
+                    <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.3em] mb-6">SMS Spam Collection Subset</h3>
+                    <div className="flex-1 overflow-y-auto space-y-4 pr-4 custom-scrollbar">
+                        {SMS_DATASET.map((entry, i) => (
+                            <div key={i} className="bg-slate-950 p-6 rounded-3xl border border-slate-800 group hover:border-cyan-500/30 transition-all">
+                                <div className="flex justify-between items-start mb-4">
+                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${entry.label === 'spam' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
+                                        LABEL: {entry.label}
+                                    </span>
+                                    <button 
+                                        onClick={() => validateMessage(entry, i)}
+                                        disabled={validating !== null}
+                                        className="text-[10px] font-black text-cyan-500 uppercase tracking-widest hover:text-cyan-400 flex items-center gap-2 group-hover:translate-x-1 transition-all disabled:opacity-30"
+                                    >
+                                        {validating === i.toString() ? 'Analyzing...' : 'Validate Model'} <ChevronRight className="w-3 h-3" />
+                                    </button>
+                                </div>
+                                <p className="text-sm text-slate-300 italic font-medium leading-relaxed">"{entry.text}"</p>
+                                
+                                {results[i] && (
+                                    <div className={`mt-4 p-4 rounded-2xl border flex items-center justify-between ${results[i].isCorrect ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-rose-500/5 border-rose-500/20'}`}>
+                                        <div className="flex items-center gap-3">
+                                            {results[i].isCorrect ? <ShieldCheck className="w-4 h-4 text-emerald-500" /> : <ShieldAlert className="w-4 h-4 text-rose-500" />}
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                                AI Verdict: <span className={results[i].isCorrect ? 'text-emerald-400' : 'text-rose-400'}>{results[i].predicted}</span>
+                                            </span>
+                                        </div>
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                            {results[i].isCorrect ? 'MATCH' : 'MISMATCH'}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="space-y-8 h-full flex flex-col">
+                    <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 space-y-6 flex-1 flex flex-col items-center justify-center text-center">
+                        <div className="w-20 h-20 bg-cyan-500/10 rounded-full flex items-center justify-center border border-cyan-500/20 mb-4 animate-pulse">
+                            <Activity className="w-8 h-8 text-cyan-400" />
+                        </div>
+                        <h4 className="text-white font-black uppercase tracking-widest">Model Performance</h4>
+                        <div className="w-full space-y-4 pt-4 text-left">
+                            <div className="bg-slate-950 p-6 rounded-3xl border border-slate-800">
+                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Total Tests</p>
+                                <p className="text-3xl font-black text-white">{Object.keys(results).length}</p>
+                            </div>
+                            <div className="bg-slate-950 p-6 rounded-3xl border border-slate-800">
+                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Correct Hits</p>
+                                <p className="text-3xl font-black text-emerald-400">{Object.values(results).filter(r => r.isCorrect).length}</p>
+                            </div>
+                            <div className="bg-slate-950 p-6 rounded-3xl border border-slate-800">
+                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Mean Accuracy</p>
+                                <div className="flex items-end gap-2">
+                                    <p className="text-3xl font-black text-cyan-400">
+                                        {Object.keys(results).length > 0 ? Math.round((Object.values(results).filter(r => r.isCorrect).length / Object.keys(results).length) * 100) : 0}%
+                                    </p>
+                                    <span className="text-[10px] text-slate-600 font-bold mb-1 uppercase">Reliability Index</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const AppBehaviorMonitor = () => {
+    const [events, setEvents] = useState<BehaviorEvent[]>([]);
+    const [isMonitoring, setIsMonitoring] = useState(false);
+
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (isMonitoring) {
+            interval = setInterval(() => {
+                const randomSample = MOCK_APP_BEHAVIORS[Math.floor(Math.random() * MOCK_APP_BEHAVIORS.length)];
+                const newEvent: BehaviorEvent = {
+                    id: Math.random().toString(36).substring(7),
+                    timestamp: new Date().toISOString(),
+                    ...randomSample
+                };
+                setEvents(prev => [newEvent, ...prev].slice(0, 50));
+            }, 800);
+        }
+        return () => clearInterval(interval);
+    }, [isMonitoring]);
+
+    return (
+        <div className="space-y-8 h-full flex flex-col">
+            <div className="bg-slate-900/50 border border-slate-800 rounded-[2.5rem] p-10 flex justify-between items-center">
+                <div className="space-y-2">
+                    <div className="flex items-center gap-4">
+                        <Activity className="w-8 h-8 text-cyan-400" />
+                        <h2 className="text-2xl font-black text-white tracking-widest uppercase italic">Real-Time Behavior Sentinel</h2>
+                    </div>
+                    <p className="text-sm text-slate-500 font-medium leading-relaxed max-w-2xl">
+                        Monitoring background application activity, network uplinks, and system-level permission escalations in real-time.
+                    </p>
+                </div>
+                <button 
+                    onClick={() => setIsMonitoring(!isMonitoring)}
+                    className={`px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${isMonitoring ? 'bg-rose-500 text-white shadow-[0_0_30px_rgba(244,63,94,0.3)]' : 'bg-cyan-500 text-black shadow-[0_0_30px_rgba(6,182,212,0.3)]'}`}
+                >
+                    {isMonitoring ? 'Terminate Feed' : 'Initialize Monitoring'}
+                </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 flex-1 overflow-hidden">
+                {/* Stats Panel */}
+                <div className="space-y-6">
+                    <div className="bg-slate-900 border border-slate-800 rounded-[2rem] p-6 space-y-4">
+                        <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Active Sensors</h3>
+                        <div className="space-y-3">
+                            {['NETWORK_LATENCY', 'CPU_THROTTLE', 'STORAGE_IO', 'MEM_LEAK_DETECTOR'].map(sensor => (
+                                <div key={sensor} className="flex items-center justify-between">
+                                    <span className="text-[10px] font-mono text-slate-400">{sensor}</span>
+                                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="bg-slate-900 border border-slate-800 rounded-[2rem] p-6 space-y-2">
+                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Flagged Anomalies</p>
+                        <p className="text-4xl font-black text-rose-500">{events.filter(e => e.isSuspicious).length}</p>
+                    </div>
+                </div>
+
+                {/* Event Feed */}
+                <div className="lg:col-span-3 bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 flex flex-col overflow-hidden relative">
+                    <div className="absolute top-0 right-0 p-8">
+                        <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${isMonitoring ? 'bg-emerald-500 animate-pulse' : 'bg-slate-700'}`} />
+                            <span className="text-[10px] font-black text-slate-500 uppercase">Uplink Status: {isMonitoring ? 'LIVE' : 'OFFLINE'}</span>
+                        </div>
+                    </div>
+                    <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.3em] mb-6">Live Behavioral Telemetry</h3>
+                    
+                    <div className="flex-1 overflow-y-auto space-y-3 pr-4 custom-scrollbar">
+                        <AnimatePresence initial={false}>
+                            {events.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-4 opacity-30">
+                                    <Terminal className="w-12 h-12" />
+                                    <p className="text-xs font-black tracking-widest uppercase italic">Awaiting Telemetry Sync...</p>
+                                </div>
+                            ) : (
+                                events.map((event) => (
+                                    <motion.div 
+                                        key={event.id}
+                                        initial={{ opacity: 0, x: -20, height: 0 }}
+                                        animate={{ opacity: 1, x: 0, height: 'auto' }}
+                                        className={`bg-slate-950/50 p-4 rounded-2xl border flex items-center gap-6 group transition-all ${event.isSuspicious ? 'border-rose-500/30 hover:bg-rose-500/5' : 'border-slate-800 hover:border-slate-700'}`}
+                                    >
+                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${event.isSuspicious ? 'bg-rose-500/10 text-rose-500' : 'bg-slate-800 text-slate-400'}`}>
+                                            {event.isSuspicious ? <ShieldAlert className="w-6 h-6" /> : <ShieldCheck className="w-6 h-6" />}
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-4 mb-1">
+                                                <span className="text-white font-black text-sm uppercase tracking-tight">{event.appName}</span>
+                                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                                                    event.category === 'permission' ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' :
+                                                    event.category === 'network' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
+                                                    'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                                }`}>
+                                                    {event.category}
+                                                </span>
+                                            </div>
+                                            <p className="text-[11px] text-slate-400 font-medium">{event.details}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[10px] text-slate-600 font-mono mb-1">{new Date(event.timestamp).toLocaleTimeString()}</p>
+                                            <span className={`text-[10px] font-black uppercase tracking-tighter ${
+                                                event.severity === ThreatLevel.CRITICAL ? 'text-rose-600' :
+                                                event.severity === ThreatLevel.HIGH ? 'text-rose-500' :
+                                                event.severity === ThreatLevel.MEDIUM ? 'text-amber-500' :
+                                                'text-emerald-500'
+                                            }`}>
+                                                {event.severity}
+                                            </span>
+                                        </div>
+                                    </motion.div>
+                                ))
+                            )}
+                        </AnimatePresence>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 const HeroMissions = ({ user, onScanResult }: { user: FirebaseUser | null, onScanResult: (threat: Omit<Threat, 'id'>) => void }) => {
   const [step, setStep] = useState(0);
   const [alertVisible, setAlertVisible] = useState(false);
@@ -480,20 +794,18 @@ const HeroMissions = ({ user, onScanResult }: { user: FirebaseUser | null, onSca
     }
     setStep(1);
     // Simulate thinking/scanning
-    setTimeout(async () => {
-        const result = await analyzePotentialThreat(scenario.content);
-        setAlertVisible(true);
-        onScanResult({
-            type: 'URL',
-            source: 'WHATSAPP_FORWARD',
-            content: scenario.content,
-            timestamp: new Date().toISOString(),
-            level: result.level,
-            status: 'blocked',
-            analysis: result.explanation
-        });
-        setStep(2);
-    }, 2000);
+    const result = await analyzePotentialThreat(scenario.content);
+    setAlertVisible(true);
+    onScanResult({
+        type: 'URL',
+        source: 'WHATSAPP_FORWARD',
+        content: scenario.content,
+        timestamp: new Date().toISOString(),
+        level: result.level,
+        status: 'blocked',
+        analysis: result.explanation
+    });
+    setStep(2);
   };
 
   return (
@@ -614,7 +926,7 @@ const HeroMissions = ({ user, onScanResult }: { user: FirebaseUser | null, onSca
 // --- Main App ---
 
 export default function App() {
-  const [activeView, setActiveView] = useState<'dashboard' | 'scan' | 'alerts' | 'quiz' | 'map' | 'scenarios'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'scan' | 'alerts' | 'quiz' | 'map' | 'scenarios' | 'researcher' | 'behavior'>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [threats, setThreats] = useState<Threat[]>([]);
   const [stats, setStats] = useState<UserStats>({
@@ -625,8 +937,13 @@ export default function App() {
   });
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
+    const hasSeenOnboarding = localStorage.getItem('cyberguard_onboarding_completed');
+    if (!hasSeenOnboarding) {
+        setShowOnboarding(true);
+    }
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
@@ -763,7 +1080,9 @@ export default function App() {
     { id: 'dashboard', label: 'DASHBOARD', icon: LayoutDashboard },
     { id: 'scenarios', label: 'HERO MISSIONS', icon: Zap },
     { id: 'scan', label: 'SENTINEL SCAN', icon: Search },
+    { id: 'behavior', label: 'BEHAVIOR LAB', icon: Activity },
     { id: 'quiz', label: 'AWARENESS HUB', icon: BookOpen },
+    { id: 'researcher', label: 'RESEARCH LAB', icon: Database },
     { id: 'map', label: 'GLOBAL NETWORK', icon: Database },
   ];
 
@@ -849,6 +1168,14 @@ export default function App() {
               <div className="hidden md:flex items-center gap-4 text-xs font-medium text-slate-400 mr-4">
                 <span className="text-white">Active Session: CG-8921-X</span>
               </div>
+              <button 
+                onClick={() => setShowOnboarding(true)}
+                className="p-2 border border-slate-800 hover:border-cyan-500/50 transition-colors rounded-xl text-slate-400 hover:text-cyan-400 flex items-center gap-2 px-3"
+                title="Restart Tutorial"
+              >
+                  <HelpCircle className="w-4 h-4" />
+                  <span className="text-[10px] font-black uppercase tracking-widest hidden lg:block">Tour</span>
+              </button>
               <button className="p-2 bg-slate-800/50 border border-slate-700/50 hover:border-cyan-500/50 transition-colors rounded-xl">
                  <Settings className="w-4 h-4 text-slate-400" />
               </button>
@@ -895,6 +1222,8 @@ export default function App() {
                     )
                   )}
                   {activeView === 'quiz' && <QuizHub />}
+                  {activeView === 'researcher' && <ResearcherPortal />}
+                  {activeView === 'behavior' && <AppBehaviorMonitor />}
                   {activeView === 'map' && <GlobalMap />}
                 </>
               )}
@@ -914,6 +1243,15 @@ export default function App() {
       {/* Decoys & Decor */}
       <div className="fixed top-0 right-0 w-64 h-64 bg-cyan-500/5 blur-[120px] pointer-events-none" />
       <div className="fixed bottom-0 left-0 w-96 h-96 bg-rose-500/5 blur-[120px] pointer-events-none" />
+      
+      <AnimatePresence>
+        {showOnboarding && (
+            <Onboarding onComplete={() => {
+                setShowOnboarding(false);
+                localStorage.setItem('cyberguard_onboarding_completed', 'true');
+            }} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
